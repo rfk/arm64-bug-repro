@@ -9,14 +9,10 @@ Calling this function via JNA seems to trigger a bug on arm64 devices.
 The ninth argument has to be passed on the stack rather than in registers,
 and the code for this in libffi seems to be broken.
 
-To test it, you can build a `.aar` using:
+To test it, you can build an Android app `.apk` using:
 
-* `./gradlew publishToMavenLocal`
+* `./gradlew assemble`
 
-Then, in a consuming Android application, import `org.mozilla.appservices.broken.BrokenThing`
-and call `BrokenThing().check()`. It will throw a `RuntimeException` if the underlying
-C library function does not return the expected result.
-
-For me, this works fine when running on an x86_64-based emulator, but errors
-when running on an arm64 device.
-
+Install and run the resulting app. It should display "Expected 9, got 9" but
+on an arm64 device, it shows the native library call returning a large number
+(which is actually a pointer).
