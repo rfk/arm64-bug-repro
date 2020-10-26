@@ -8,6 +8,8 @@ import com.sun.jna.Structure
 import com.sun.jna.Pointer
 
 
+// A struct containing a single `int64_t` field.
+//
 @Structure.FieldOrder("inner")
 open class WrappedLong : Structure() {
     @JvmField var inner: Long = 0
@@ -15,6 +17,11 @@ open class WrappedLong : Structure() {
     class ByValue : WrappedLong(), Structure.ByValue
 
     companion object {
+      //
+      // A little helper to construct and set the inner field.
+      // (I was using this mess around with different permutations of
+      // padding fields in order to better understand the bug).
+      //
       fun containing(v: Long) : WrappedLong.ByValue {
         val w = WrappedLong.ByValue()
         w.inner = v
@@ -24,12 +31,15 @@ open class WrappedLong : Structure() {
 }
 
 
+// A library exposing a single function, which takes nine `WrappedLong` structs
+// and returns the value contained in the ninth one.
+//
 internal interface LIBRARY: Library {
   companion object {
-    internal var INSTANCE: LIBRARY = Native.load<LIBRARY>("cbroken", LIBRARY::class.java)
+    internal var INSTANCE: LIBRARY = Native.load<LIBRARY>("broken", LIBRARY::class.java)
   }
 
-  fun this_seems_broken(
+  fun return_the_ninth_argument(
     arg1: WrappedLong.ByValue,
     arg2: WrappedLong.ByValue,
     arg3: WrappedLong.ByValue,
@@ -44,16 +54,22 @@ internal interface LIBRARY: Library {
 
 
 public class BrokenThing() {
-  fun getval(): Long {
+  fun check() {
+    //
     // The native function returns the wrapped value in its ninth argument.
     // So this call should always return `9`, right?
-    // Well, on android arm64 it seems to be reading garbage from the stack instead.
-    // I have a working theory that JNA or libffi is not passing the 9th argument
-    // correctly, because it works as expected when the native function returns any
-    // of its first 8 arguments. This may be related to the arm64 calling convention
-    // passing up to 8 integer arguments in registers but additional arguments on
-    // the stack, but that's the limit of my understanding so far.
-    return LIBRARY.INSTANCE.this_seems_broken(
+    //
+    // Well, on android arm64 it returns a pointer to the value `9` instead.
+    //
+    // This seems to be due to a bug in the version of libffi shipped with JNA,
+    // specifically when passing a small struct argument on the stack. This line of code:
+    //
+    //    https://github.com/java-native-access/jna/blob/0a0e44d4e8c616eb948fae7b87f882db32db5e60/native/libffi/src/aarch64/ffi.c#L733
+    //
+    // Incorrectly `memcpy`s from `ecif->avalue + i` instead of from `ecif->avalue[i]`,
+    // failing to resolve one level of pointer indirection.
+    // 
+    val ninth_arg = LIBRARY.INSTANCE.return_the_ninth_argument(
       WrappedLong.containing(1),
       WrappedLong.containing(2),
       WrappedLong.containing(3),
@@ -64,5 +80,9 @@ public class BrokenThing() {
       WrappedLong.containing(8),
       WrappedLong.containing(9)
     )
+
+    if (ninth_arg != 9L) {
+      throw RuntimeException("Expected call to return 9, but instead got $ninth_arg")
+    }
   }
 }

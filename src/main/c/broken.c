@@ -8,7 +8,7 @@ typedef struct WrappedLong {
     int64_t inner;
 } WrappedLong;
 
-int64_t this_seems_broken(
+int64_t return_the_ninth_argument(
   WrappedLong arg1,
   WrappedLong arg2,
   WrappedLong arg3,
